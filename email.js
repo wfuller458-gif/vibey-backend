@@ -1,13 +1,29 @@
 const { Resend } = require('resend');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Initialize lazily to ensure env vars are loaded
+let resend = null;
+function getResend() {
+  if (!resend) {
+    if (!process.env.RESEND_API_KEY) {
+      console.error('RESEND_API_KEY is not set');
+      return null;
+    }
+    resend = new Resend(process.env.RESEND_API_KEY);
+  }
+  return resend;
+}
 
 async function sendLicenseEmail(email, licenseKey, plan) {
+  const client = getResend();
+  if (!client) {
+    console.error('Cannot send email - Resend not configured');
+    return false;
+  }
   const planName = plan === 'monthly' ? 'Monthly' : 'Yearly';
   const price = plan === 'monthly' ? '£5.99/month' : '£39.99/year';
 
   try {
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await client.emails.send({
       from: process.env.FROM_EMAIL || 'Vibey <onboarding@resend.dev>',
       to: email,
       subject: 'Your Vibey License Key',
