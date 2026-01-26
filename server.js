@@ -3,7 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { createLicense, getLicenseByKey, getLicenseBySubscriptionId, updateLicense } = require('./database');
-const { sendLicenseEmail } = require('./email');
+// Email disabled - showing license on success page instead
+// const { sendLicenseEmail } = require('./email');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -62,8 +63,8 @@ app.post('/webhook', express.raw({ type: '*/*' }), async (req, res) => {
           renewsAt: subscription.current_period_end * 1000
         });
 
-        // Send email with license key
-        await sendLicenseEmail(customer.email, license.key, plan);
+        // Email disabled - showing license on success page instead
+        // await sendLicenseEmail(customer.email, license.key, plan);
 
         console.log(`License created for ${customer.email}: ${license.key}`);
         break;
@@ -129,6 +130,37 @@ app.use(express.json());
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
+});
+
+// Get license by Stripe session ID (for success page)
+app.get('/license/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    // Get session from Stripe
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+    if (!session || !session.customer_email) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    // Find license by email
+    const { getLicenseByEmail } = require('./database');
+    const license = await getLicenseByEmail(session.customer_email);
+
+    if (!license) {
+      return res.status(404).json({ error: 'License not found' });
+    }
+
+    res.json({
+      key: license.key,
+      plan: license.plan,
+      email: session.customer_email
+    });
+  } catch (error) {
+    console.error('Get license error:', error);
+    res.status(500).json({ error: 'Failed to get license' });
+  }
 });
 
 // License validation endpoint

@@ -68,6 +68,12 @@ async function getLicenseBySubscriptionId(subscriptionId) {
   return db.licenses.find(l => l.stripeSubscriptionId === subscriptionId);
 }
 
+// Get license by email
+async function getLicenseByEmail(email) {
+  const db = await readDB();
+  return db.licenses.find(l => l.email === email);
+}
+
 // Update license
 async function updateLicense(key, updates) {
   const db = await readDB();
@@ -86,5 +92,6 @@ module.exports = {
   createLicense,
   getLicenseByKey,
   getLicenseBySubscriptionId,
+  getLicenseByEmail,
   updateLicense
 };
