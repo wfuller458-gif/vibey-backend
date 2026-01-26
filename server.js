@@ -8,24 +8,35 @@ const { sendLicenseEmail } = require('./email');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// CORS for all routes
-app.use(cors());
-
-// Webhook route needs raw body - must be before express.json()
-app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+// Webhook route needs raw body - must be FIRST before any body parsing
+app.post('/webhook', express.raw({ type: '*/*' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  console.log('Webhook received');
+  console.log('Signature present:', !!sig);
+  console.log('Secret configured:', !!webhookSecret);
+  console.log('Body type:', typeof req.body);
+  console.log('Body is Buffer:', Buffer.isBuffer(req.body));
+
+  if (!webhookSecret) {
+    console.error('STRIPE_WEBHOOK_SECRET is not set!');
+    return res.status(500).send('Webhook secret not configured');
+  }
 
   let event;
 
   try {
     event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+    console.log('Webhook verified successfully:', event.type);
   } catch (err) {
     console.error('Webhook signature verification failed:', err.message);
+    console.error('Body preview:', req.body?.toString?.().substring(0, 100));
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
   try {
+    console.log('Processing event:', event.type);
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object;
