@@ -136,17 +136,21 @@ app.get('/health', (req, res) => {
 app.get('/license/:sessionId', async (req, res) => {
   try {
     const { sessionId } = req.params;
+    console.log('Looking up license for session:', sessionId);
 
     // Get session from Stripe
     const session = await stripe.checkout.sessions.retrieve(sessionId);
+    console.log('Stripe session found, email:', session.customer_email);
 
     if (!session || !session.customer_email) {
+      console.log('No session or no email');
       return res.status(404).json({ error: 'Session not found' });
     }
 
     // Find license by email
     const { getLicenseByEmail } = require('./database');
     const license = await getLicenseByEmail(session.customer_email);
+    console.log('License lookup result:', license ? license.key : 'NOT FOUND');
 
     if (!license) {
       return res.status(404).json({ error: 'License not found' });
@@ -158,7 +162,7 @@ app.get('/license/:sessionId', async (req, res) => {
       email: session.customer_email
     });
   } catch (error) {
-    console.error('Get license error:', error);
+    console.error('Get license error:', error.message);
     res.status(500).json({ error: 'Failed to get license' });
   }
 });
