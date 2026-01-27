@@ -9,6 +9,12 @@ const { createLicense, getLicenseByKey, getLicenseBySubscriptionId, updateLicens
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Enable CORS for frontend
+app.use(cors({
+  origin: ['https://vibey.codes', 'https://www.vibey.codes', 'http://localhost:3000'],
+  methods: ['GET', 'POST'],
+}));
+
 // Webhook route needs raw body - must be FIRST before any body parsing
 app.post('/webhook', express.raw({ type: '*/*' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
