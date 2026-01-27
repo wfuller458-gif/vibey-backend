@@ -54,7 +54,10 @@ app.post('/webhook', express.raw({ type: '*/*' }), async (req, res) => {
 
         // Determine plan from price ID
         const priceId = subscription.items.data[0].price.id;
+        console.log('Price ID from Stripe:', priceId);
+        console.log('Monthly price ID env:', process.env.STRIPE_MONTHLY_PRICE_ID);
         const plan = priceId === process.env.STRIPE_MONTHLY_PRICE_ID ? 'monthly' : 'yearly';
+        console.log('Determined plan:', plan);
 
         // Create license
         const license = await createLicense(
