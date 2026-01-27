@@ -68,10 +68,13 @@ async function getLicenseBySubscriptionId(subscriptionId) {
   return db.licenses.find(l => l.stripeSubscriptionId === subscriptionId);
 }
 
-// Get license by email
+// Get license by email (returns most recent if multiple exist)
 async function getLicenseByEmail(email) {
   const db = await readDB();
-  return db.licenses.find(l => l.email === email);
+  const matches = db.licenses.filter(l => l.email === email);
+  if (matches.length === 0) return null;
+  // Return the most recently created license
+  return matches.sort((a, b) => b.createdAt - a.createdAt)[0];
 }
 
 // Update license
