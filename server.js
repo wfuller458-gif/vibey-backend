@@ -186,6 +186,23 @@ app.get('/license/:sessionId', async (req, res) => {
   }
 });
 
+// Admin: lookup license by email (protect this in production)
+app.get('/admin/lookup/:email', async (req, res) => {
+  const adminKey = req.headers['x-admin-key'];
+  if (adminKey !== process.env.ADMIN_KEY) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const { getLicenseByEmail } = require('./database');
+  const license = await getLicenseByEmail(req.params.email);
+
+  if (!license) {
+    return res.status(404).json({ error: 'No license found for this email' });
+  }
+
+  res.json(license);
+});
+
 // License validation endpoint
 app.post('/validate', async (req, res) => {
   try {
