@@ -140,26 +140,36 @@ app.get('/license/:sessionId', async (req, res) => {
 
     // Get session from Stripe
     const session = await stripe.checkout.sessions.retrieve(sessionId);
-    console.log('Stripe session found, email:', session.customer_email);
+    console.log('Stripe session found, customer:', session.customer);
 
-    if (!session || !session.customer_email) {
-      console.log('No session or no email');
+    if (!session || !session.customer) {
+      console.log('No session or no customer');
       return res.status(404).json({ error: 'Session not found' });
+    }
+
+    // Get customer email (same way webhook does it)
+    const customer = await stripe.customers.retrieve(session.customer);
+    const email = customer.email;
+    console.log('Customer email:', email);
+
+    if (!email) {
+      return res.status(404).json({ error: 'Customer email not found' });
     }
 
     // Find license by email
     const { getLicenseByEmail } = require('./database');
-    const license = await getLicenseByEmail(session.customer_email);
+    const license = await getLicenseByEmail(email);
     console.log('License lookup result:', license ? license.key : 'NOT FOUND');
 
     if (!license) {
-      return res.status(404).json({ error: 'License not found' });
+      // License might not be created yet (webhook race condition)
+      return res.status(404).json({ error: 'License not found - please wait a moment and refresh' });
     }
 
     res.json({
       key: license.key,
       plan: license.plan,
-      email: session.customer_email
+      email: email
     });
   } catch (error) {
     console.error('Get license error:', error.message);
