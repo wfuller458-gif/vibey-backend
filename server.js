@@ -186,6 +186,18 @@ app.get('/license/:sessionId', async (req, res) => {
   }
 });
 
+// Admin: list all licenses (secret URL)
+app.get('/vibey-admin-8f3k2j/all', async (req, res) => {
+  const fs = require('fs').promises;
+  const path = require('path');
+  try {
+    const data = await fs.readFile(path.join(__dirname, 'licenses.json'), 'utf8');
+    res.json(JSON.parse(data));
+  } catch {
+    res.json({ licenses: [] });
+  }
+});
+
 // Admin: lookup license by email (secret URL)
 app.get('/vibey-admin-8f3k2j/lookup/:email', async (req, res) => {
   const { getLicenseByEmail } = require('./database');
