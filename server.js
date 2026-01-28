@@ -186,13 +186,8 @@ app.get('/license/:sessionId', async (req, res) => {
   }
 });
 
-// Admin: lookup license by email (protect this in production)
-app.get('/admin/lookup/:email', async (req, res) => {
-  const adminKey = req.headers['x-admin-key'];
-  if (adminKey !== process.env.ADMIN_KEY) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
+// Admin: lookup license by email (secret URL)
+app.get('/vibey-admin-8f3k2j/lookup/:email', async (req, res) => {
   const { getLicenseByEmail } = require('./database');
   const license = await getLicenseByEmail(req.params.email);
 
