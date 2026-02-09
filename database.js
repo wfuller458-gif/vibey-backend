@@ -3,6 +3,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const DB_FILE = path.join(__dirname, 'licenses.json');
+const USAGE_FILE = path.join(__dirname, 'usage.json');
 
 // Initialize database file if it doesn't exist
 async function initDB() {
@@ -90,11 +91,50 @@ async function updateLicense(key, updates) {
   return db.licenses[index];
 }
 
+// Usage tracking
+async function initUsageDB() {
+  try {
+    await fs.access(USAGE_FILE);
+  } catch {
+    await fs.writeFile(USAGE_FILE, JSON.stringify({}, null, 2));
+  }
+}
+
+async function recordUsage(licenseKey, appVersion) {
+  await initUsageDB();
+  const data = await fs.readFile(USAGE_FILE, 'utf8');
+  const usage = JSON.parse(data);
+
+  if (!usage[licenseKey]) {
+    usage[licenseKey] = {
+      firstSeen: Date.now(),
+      lastSeen: Date.now(),
+      sessionCount: 0,
+      appVersion: appVersion || 'unknown'
+    };
+  }
+
+  usage[licenseKey].lastSeen = Date.now();
+  usage[licenseKey].sessionCount = (usage[licenseKey].sessionCount || 0) + 1;
+  if (appVersion) usage[licenseKey].appVersion = appVersion;
+
+  await fs.writeFile(USAGE_FILE, JSON.stringify(usage, null, 2));
+  return usage[licenseKey];
+}
+
+async function getAllUsage() {
+  await initUsageDB();
+  const data = await fs.readFile(USAGE_FILE, 'utf8');
+  return JSON.parse(data);
+}
+
 module.exports = {
   generateLicenseKey,
   createLicense,
   getLicenseByKey,
   getLicenseBySubscriptionId,
   getLicenseByEmail,
-  updateLicense
+  updateLicense,
+  recordUsage,
+  getAllUsage
 };

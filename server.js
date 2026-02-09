@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const { createLicense, getLicenseByKey, getLicenseBySubscriptionId, updateLicense } = require('./database');
+const { createLicense, getLicenseByKey, getLicenseBySubscriptionId, updateLicense, recordUsage, getAllUsage } = require('./database');
 // Email disabled - showing license on success page instead
 // const { sendLicenseEmail } = require('./email');
 
@@ -208,6 +208,164 @@ app.get('/vibey-admin-8f3k2j/lookup/:email', async (req, res) => {
   }
 
   res.json(license);
+});
+
+// Admin Dashboard (secret URL)
+app.get('/vibey-admin-8f3k2j/dashboard', async (req, res) => {
+  const fs = require('fs').promises;
+  const path = require('path');
+
+  let licenses = [];
+  let usage = {};
+
+  try {
+    const licenseData = await fs.readFile(path.join(__dirname, 'licenses.json'), 'utf8');
+    licenses = JSON.parse(licenseData).licenses || [];
+  } catch {}
+
+  try {
+    usage = await getAllUsage();
+  } catch {}
+
+  // Build HTML dashboard
+  const now = Date.now();
+  const formatDate = (ts) => ts ? new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Never';
+  const timeAgo = (ts) => {
+    if (!ts) return 'Never';
+    const diff = now - ts;
+    const mins = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+    if (days > 0) return days + 'd ago';
+    if (hours > 0) return hours + 'h ago';
+    if (mins > 0) return mins + 'm ago';
+    return 'Just now';
+  };
+
+  const statusBadge = (status) => {
+    const colors = {
+      active: '#22c55e',
+      cancelled: '#ef4444',
+      payment_failed: '#f59e0b',
+      trial: '#3b82f6'
+    };
+    return \`<span style="background:\${colors[status] || '#6b7280'};color:white;padding:2px 8px;border-radius:4px;font-size:12px">\${status}</span>\`;
+  };
+
+  // Combine licenses with usage data
+  const rows = licenses.map(l => {
+    const usageData = usage[l.key] || {};
+    return \`
+      <tr>
+        <td>\${l.email}</td>
+        <td><code>\${l.key}</code></td>
+        <td>\${l.plan}</td>
+        <td>\${statusBadge(l.status)}</td>
+        <td>\${formatDate(l.createdAt)}</td>
+        <td>\${l.renewsAt ? formatDate(l.renewsAt) : '-'}</td>
+        <td>\${timeAgo(usageData.lastSeen)}</td>
+        <td>\${usageData.sessionCount || 0}</td>
+      </tr>
+    \`;
+  }).join('');
+
+  // Trial users (users who pinged but aren't in licenses)
+  const trialUsage = usage['trial'] || {};
+  const trialRow = trialUsage.lastSeen ? \`
+    <tr style="background:#1e293b">
+      <td colspan="2"><em>Trial Users (aggregate)</em></td>
+      <td>trial</td>
+      <td>\${statusBadge('trial')}</td>
+      <td>-</td>
+      <td>-</td>
+      <td>\${timeAgo(trialUsage.lastSeen)}</td>
+      <td>\${trialUsage.sessionCount || 0}</td>
+    </tr>
+  \` : '';
+
+  const html = \`
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Vibey Admin Dashboard</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 20px; }
+    h1 { color: #fff; margin-bottom: 20px; }
+    .stats { display: flex; gap: 20px; margin-bottom: 30px; }
+    .stat { background: #1e293b; padding: 20px; border-radius: 8px; min-width: 150px; }
+    .stat-value { font-size: 32px; font-weight: bold; color: #fff; }
+    .stat-label { color: #94a3b8; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 8px; overflow: hidden; }
+    th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #334155; }
+    th { background: #334155; color: #fff; font-weight: 600; }
+    tr:hover { background: #334155; }
+    code { background: #334155; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+    .refresh { color: #94a3b8; font-size: 14px; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <h1>🎵 Vibey Admin Dashboard</h1>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-value">\${licenses.length}</div>
+      <div class="stat-label">Total Licenses</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">\${licenses.filter(l => l.status === 'active').length}</div>
+      <div class="stat-label">Active</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">\${licenses.filter(l => l.status === 'payment_failed').length}</div>
+      <div class="stat-label">Payment Failed</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">\${trialUsage.sessionCount || 0}</div>
+      <div class="stat-label">Trial Sessions</div>
+    </div>
+  </div>
+
+  <p class="refresh">Last refreshed: \${new Date().toLocaleString()}</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Email</th>
+        <th>License Key</th>
+        <th>Plan</th>
+        <th>Status</th>
+        <th>Created</th>
+        <th>Renews</th>
+        <th>Last Active</th>
+        <th>Sessions</th>
+      </tr>
+    </thead>
+    <tbody>
+      \${rows}
+      \${trialRow}
+    </tbody>
+  </table>
+</body>
+</html>
+  \`;
+
+  res.type('html').send(html);
+});
+
+// Analytics ping endpoint - app calls this on launch
+app.post('/ping', async (req, res) => {
+  try {
+    const { licenseKey, appVersion } = req.body;
+
+    // Record usage (works for both licensed and trial users)
+    await recordUsage(licenseKey || 'trial', appVersion);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Ping error:', error);
+    res.status(500).json({ success: false });
+  }
 });
 
 // License validation endpoint
