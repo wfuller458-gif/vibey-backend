@@ -100,26 +100,30 @@ async function initUsageDB() {
   }
 }
 
-async function recordUsage(licenseKey, appVersion) {
+async function recordUsage(deviceId, licenseKey, appVersion, trialEndDate) {
   await initUsageDB();
   const data = await fs.readFile(USAGE_FILE, 'utf8');
   const usage = JSON.parse(data);
 
-  if (!usage[licenseKey]) {
-    usage[licenseKey] = {
+  if (!usage[deviceId]) {
+    usage[deviceId] = {
       firstSeen: Date.now(),
       lastSeen: Date.now(),
       sessionCount: 0,
-      appVersion: appVersion || 'unknown'
+      appVersion: appVersion || 'unknown',
+      licenseKey: null,
+      trialEndDate: null
     };
   }
 
-  usage[licenseKey].lastSeen = Date.now();
-  usage[licenseKey].sessionCount = (usage[licenseKey].sessionCount || 0) + 1;
-  if (appVersion) usage[licenseKey].appVersion = appVersion;
+  usage[deviceId].lastSeen = Date.now();
+  usage[deviceId].sessionCount = (usage[deviceId].sessionCount || 0) + 1;
+  if (appVersion) usage[deviceId].appVersion = appVersion;
+  if (licenseKey) usage[deviceId].licenseKey = licenseKey;
+  if (trialEndDate) usage[deviceId].trialEndDate = trialEndDate;
 
   await fs.writeFile(USAGE_FILE, JSON.stringify(usage, null, 2));
-  return usage[licenseKey];
+  return usage[deviceId];
 }
 
 async function getAllUsage() {

@@ -227,9 +227,9 @@ app.get('/vibey-admin-8f3k2j/dashboard', async (req, res) => {
     usage = await getAllUsage();
   } catch {}
 
-  // Build HTML dashboard
   const now = Date.now();
-  const formatDate = (ts) => ts ? new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Never';
+
+  // Helper functions
   const timeAgo = (ts) => {
     if (!ts) return 'Never';
     const diff = now - ts;
@@ -242,99 +242,130 @@ app.get('/vibey-admin-8f3k2j/dashboard', async (req, res) => {
     return 'Just now';
   };
 
-  const statusBadge = (status) => {
-    const colors = {
-      active: '#22c55e',
-      cancelled: '#ef4444',
-      payment_failed: '#f59e0b',
-      trial: '#3b82f6'
-    };
-    return '<span style="background:' + (colors[status] || '#6b7280') + ';color:white;padding:2px 8px;border-radius:4px;font-size:12px">' + status + '</span>';
+  const timeUntil = (ts) => {
+    if (!ts) return '-';
+    const diff = ts - now;
+    if (diff <= 0) return 'Expired';
+    const days = Math.floor(diff / 86400000);
+    const hours = Math.floor((diff % 86400000) / 3600000);
+    if (days > 0) return days + 'd ' + hours + 'h left';
+    return hours + 'h left';
   };
 
-  // Combine licenses with usage data
-  const rows = licenses.map(l => {
-    const usageData = usage[l.key] || {};
+  const badge = (text, color) => {
+    return '<span style="background:' + color + ';color:white;padding:2px 8px;border-radius:4px;font-size:12px">' + text + '</span>';
+  };
+
+  // Build user list from usage data
+  const users = Object.entries(usage).map(([deviceId, data]) => {
+    const hasLicense = data.licenseKey && licenses.find(l => l.key === data.licenseKey);
+    const trialExpired = data.trialEndDate && data.trialEndDate < now;
+
+    let status, statusColor;
+    if (hasLicense) {
+      status = 'Converted';
+      statusColor = '#22c55e';
+    } else if (trialExpired) {
+      status = 'Trial Expired';
+      statusColor = '#ef4444';
+    } else if (data.trialEndDate) {
+      status = 'Trial Active';
+      statusColor = '#3b82f6';
+    } else {
+      status = 'Unknown';
+      statusColor = '#6b7280';
+    }
+
+    return {
+      deviceId,
+      status,
+      statusColor,
+      trialEndDate: data.trialEndDate,
+      licenseKey: data.licenseKey,
+      lastSeen: data.lastSeen,
+      sessionCount: data.sessionCount || 0,
+      firstSeen: data.firstSeen,
+      appVersion: data.appVersion
+    };
+  }).sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
+
+  // Stats
+  const totalUsers = users.length;
+  const activeTrials = users.filter(u => u.status === 'Trial Active').length;
+  const expiredTrials = users.filter(u => u.status === 'Trial Expired').length;
+  const converted = users.filter(u => u.status === 'Converted').length;
+
+  // Build rows
+  const rows = users.map(u => {
     return '<tr>' +
-      '<td>' + l.email + '</td>' +
-      '<td><code>' + l.key + '</code></td>' +
-      '<td>' + l.plan + '</td>' +
-      '<td>' + statusBadge(l.status) + '</td>' +
-      '<td>' + formatDate(l.createdAt) + '</td>' +
-      '<td>' + (l.renewsAt ? formatDate(l.renewsAt) : '-') + '</td>' +
-      '<td>' + timeAgo(usageData.lastSeen) + '</td>' +
-      '<td>' + (usageData.sessionCount || 0) + '</td>' +
+      '<td><code style="font-size:10px">' + u.deviceId.substring(0, 8) + '...</code></td>' +
+      '<td>' + badge(u.status, u.statusColor) + '</td>' +
+      '<td>' + timeUntil(u.trialEndDate) + '</td>' +
+      '<td>' + (u.licenseKey ? '<code style="font-size:10px">' + u.licenseKey.substring(0, 12) + '...</code>' : '-') + '</td>' +
+      '<td>' + timeAgo(u.lastSeen) + '</td>' +
+      '<td>' + u.sessionCount + '</td>' +
+      '<td>' + (u.appVersion || '-') + '</td>' +
       '</tr>';
   }).join('');
-
-  // Trial users (users who pinged but aren't in licenses)
-  const trialUsage = usage['trial'] || {};
-  const trialRow = trialUsage.lastSeen ?
-    '<tr style="background:#1e293b">' +
-    '<td colspan="2"><em>Trial Users (aggregate)</em></td>' +
-    '<td>trial</td>' +
-    '<td>' + statusBadge('trial') + '</td>' +
-    '<td>-</td>' +
-    '<td>-</td>' +
-    '<td>' + timeAgo(trialUsage.lastSeen) + '</td>' +
-    '<td>' + (trialUsage.sessionCount || 0) + '</td>' +
-    '</tr>' : '';
 
   const html = '<!DOCTYPE html>' +
 '<html>' +
 '<head>' +
 '  <title>Vibey Admin Dashboard</title>' +
+'  <meta http-equiv="refresh" content="30">' +
 '  <style>' +
 '    * { box-sizing: border-box; }' +
 '    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 20px; }' +
-'    h1 { color: #fff; margin-bottom: 20px; }' +
-'    .stats { display: flex; gap: 20px; margin-bottom: 30px; }' +
-'    .stat { background: #1e293b; padding: 20px; border-radius: 8px; min-width: 150px; }' +
-'    .stat-value { font-size: 32px; font-weight: bold; color: #fff; }' +
-'    .stat-label { color: #94a3b8; font-size: 14px; }' +
+'    h1 { color: #fff; margin-bottom: 10px; }' +
+'    h2 { color: #94a3b8; font-size: 16px; margin: 30px 0 15px 0; }' +
+'    .stats { display: flex; gap: 15px; margin-bottom: 30px; flex-wrap: wrap; }' +
+'    .stat { background: #1e293b; padding: 20px; border-radius: 8px; min-width: 140px; }' +
+'    .stat-value { font-size: 28px; font-weight: bold; color: #fff; }' +
+'    .stat-label { color: #94a3b8; font-size: 13px; margin-top: 4px; }' +
 '    table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 8px; overflow: hidden; }' +
-'    th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid #334155; }' +
-'    th { background: #334155; color: #fff; font-weight: 600; }' +
+'    th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #334155; }' +
+'    th { background: #334155; color: #fff; font-weight: 600; font-size: 13px; }' +
+'    td { font-size: 13px; }' +
 '    tr:hover { background: #334155; }' +
-'    code { background: #334155; padding: 2px 6px; border-radius: 4px; font-size: 12px; }' +
-'    .refresh { color: #94a3b8; font-size: 14px; margin-bottom: 10px; }' +
+'    code { background: #334155; padding: 2px 6px; border-radius: 4px; }' +
+'    .refresh { color: #64748b; font-size: 12px; margin-bottom: 20px; }' +
 '  </style>' +
 '</head>' +
 '<body>' +
 '  <h1>Vibey Admin Dashboard</h1>' +
+'  <p class="refresh">Auto-refreshes every 30s | Last: ' + new Date().toLocaleString() + '</p>' +
 '  <div class="stats">' +
 '    <div class="stat">' +
-'      <div class="stat-value">' + licenses.length + '</div>' +
-'      <div class="stat-label">Total Licenses</div>' +
+'      <div class="stat-value">' + totalUsers + '</div>' +
+'      <div class="stat-label">Total Users</div>' +
 '    </div>' +
 '    <div class="stat">' +
-'      <div class="stat-value">' + licenses.filter(l => l.status === 'active').length + '</div>' +
-'      <div class="stat-label">Active</div>' +
+'      <div class="stat-value" style="color:#3b82f6">' + activeTrials + '</div>' +
+'      <div class="stat-label">Active Trials</div>' +
 '    </div>' +
 '    <div class="stat">' +
-'      <div class="stat-value">' + licenses.filter(l => l.status === 'payment_failed').length + '</div>' +
-'      <div class="stat-label">Payment Failed</div>' +
+'      <div class="stat-value" style="color:#ef4444">' + expiredTrials + '</div>' +
+'      <div class="stat-label">Expired Trials</div>' +
 '    </div>' +
 '    <div class="stat">' +
-'      <div class="stat-value">' + (trialUsage.sessionCount || 0) + '</div>' +
-'      <div class="stat-label">Trial Sessions</div>' +
+'      <div class="stat-value" style="color:#22c55e">' + converted + '</div>' +
+'      <div class="stat-label">Converted</div>' +
 '    </div>' +
 '  </div>' +
-'  <p class="refresh">Last refreshed: ' + new Date().toLocaleString() + '</p>' +
+'  <h2>All Users</h2>' +
 '  <table>' +
 '    <thead>' +
 '      <tr>' +
-'        <th>Email</th>' +
-'        <th>License Key</th>' +
-'        <th>Plan</th>' +
+'        <th>Device</th>' +
 '        <th>Status</th>' +
-'        <th>Created</th>' +
-'        <th>Renews</th>' +
+'        <th>Trial Expires</th>' +
+'        <th>License</th>' +
 '        <th>Last Active</th>' +
 '        <th>Sessions</th>' +
+'        <th>Version</th>' +
 '      </tr>' +
 '    </thead>' +
-'    <tbody>' + rows + trialRow + '</tbody>' +
+'    <tbody>' + (rows || '<tr><td colspan="7" style="text-align:center;color:#64748b">No users yet</td></tr>') + '</tbody>' +
 '  </table>' +
 '</body>' +
 '</html>';
@@ -345,10 +376,14 @@ app.get('/vibey-admin-8f3k2j/dashboard', async (req, res) => {
 // Analytics ping endpoint - app calls this on launch
 app.post('/ping', async (req, res) => {
   try {
-    const { licenseKey, appVersion } = req.body;
+    const { deviceId, licenseKey, appVersion, trialEndDate } = req.body;
 
-    // Record usage (works for both licensed and trial users)
-    await recordUsage(licenseKey || 'trial', appVersion);
+    if (!deviceId) {
+      return res.status(400).json({ success: false, error: 'deviceId required' });
+    }
+
+    // Record usage with all the info
+    await recordUsage(deviceId, licenseKey || null, appVersion, trialEndDate || null);
 
     res.json({ success: true });
   } catch (error) {
