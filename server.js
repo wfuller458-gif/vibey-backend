@@ -209,11 +209,12 @@ app.delete('/vibey-admin-8f3k2j/user/:deviceId', async (req, res) => {
 app.post('/vibey-admin-8f3k2j/add-license', async (req, res) => {
   const fs = require('fs').promises;
   const path = require('path');
+  const dbPath = path.join(__dirname, 'licenses.json');
   try {
-    const data = await fs.readFile(path.join(__dirname, 'licenses.json'), 'utf8');
-    const db = JSON.parse(data);
+    let db = { licenses: [] };
+    try { db = JSON.parse(await fs.readFile(dbPath, 'utf8')); } catch {}
     db.licenses.push(req.body);
-    await fs.writeFile(path.join(__dirname, 'licenses.json'), JSON.stringify(db, null, 2));
+    await fs.writeFile(dbPath, JSON.stringify(db, null, 2));
     res.json({ success: true, message: 'License added' });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
