@@ -186,6 +186,25 @@ app.get('/license/:sessionId', async (req, res) => {
   }
 });
 
+// Admin: DELETE a single user from usage tracking
+app.delete('/vibey-admin-8f3k2j/user/:deviceId', async (req, res) => {
+  const fs = require('fs').promises;
+  const path = require('path');
+  try {
+    const data = await fs.readFile(path.join(__dirname, 'usage.json'), 'utf8');
+    const usage = JSON.parse(data);
+    const { deviceId } = req.params;
+    if (!usage[deviceId]) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    delete usage[deviceId];
+    await fs.writeFile(path.join(__dirname, 'usage.json'), JSON.stringify(usage, null, 2));
+    res.json({ success: true, message: 'User deleted' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Admin: RESET all data (secret URL) - clears licenses and usage
 app.post('/vibey-admin-8f3k2j/reset', async (req, res) => {
   const fs = require('fs').promises;
@@ -310,7 +329,7 @@ app.get('/vibey-admin-8f3k2j/dashboard', async (req, res) => {
 
   // Build rows
   const rows = users.map(u => {
-    return '<tr>' +
+    return '<tr id="row-' + u.deviceId + '">' +
       '<td><code style="font-size:10px">' + u.deviceId.substring(0, 8) + '...</code></td>' +
       '<td>' + badge(u.status, u.statusColor) + '</td>' +
       '<td>' + timeUntil(u.trialEndDate) + '</td>' +
@@ -318,6 +337,7 @@ app.get('/vibey-admin-8f3k2j/dashboard', async (req, res) => {
       '<td>' + timeAgo(u.lastSeen) + '</td>' +
       '<td>' + u.sessionCount + '</td>' +
       '<td>' + (u.appVersion || '-') + '</td>' +
+      '<td><button onclick="deleteUser(\'' + u.deviceId + '\')" style="background:#ef4444;color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px">Delete</button></td>' +
       '</tr>';
   }).join('');
 
@@ -376,10 +396,19 @@ app.get('/vibey-admin-8f3k2j/dashboard', async (req, res) => {
 '        <th>Last Active</th>' +
 '        <th>Sessions</th>' +
 '        <th>Version</th>' +
+'        <th>Actions</th>' +
 '      </tr>' +
 '    </thead>' +
-'    <tbody>' + (rows || '<tr><td colspan="7" style="text-align:center;color:#64748b">No users yet</td></tr>') + '</tbody>' +
+'    <tbody>' + (rows || '<tr><td colspan="8" style="text-align:center;color:#64748b">No users yet</td></tr>') + '</tbody>' +
 '  </table>' +
+'  <script>' +
+'    async function deleteUser(deviceId) {' +
+'      if (!confirm("Delete user " + deviceId.substring(0, 8) + "...?")) return;' +
+'      const res = await fetch("/vibey-admin-8f3k2j/user/" + encodeURIComponent(deviceId), { method: "DELETE" });' +
+'      if (res.ok) { document.getElementById("row-" + deviceId).remove(); }' +
+'      else { alert("Failed to delete user"); }' +
+'    }' +
+'  </script>' +
 '</body>' +
 '</html>';
 
