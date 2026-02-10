@@ -205,6 +205,21 @@ app.delete('/vibey-admin-8f3k2j/user/:deviceId', async (req, res) => {
   }
 });
 
+// Admin: ADD a license (for restoring data)
+app.post('/vibey-admin-8f3k2j/add-license', async (req, res) => {
+  const fs = require('fs').promises;
+  const path = require('path');
+  try {
+    const data = await fs.readFile(path.join(__dirname, 'licenses.json'), 'utf8');
+    const db = JSON.parse(data);
+    db.licenses.push(req.body);
+    await fs.writeFile(path.join(__dirname, 'licenses.json'), JSON.stringify(db, null, 2));
+    res.json({ success: true, message: 'License added' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Admin: RESET all data (secret URL) - clears licenses and usage
 app.post('/vibey-admin-8f3k2j/reset', async (req, res) => {
   const fs = require('fs').promises;
