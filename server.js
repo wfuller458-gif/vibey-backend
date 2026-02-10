@@ -186,6 +186,19 @@ app.get('/license/:sessionId', async (req, res) => {
   }
 });
 
+// Admin: RESET all data (secret URL) - clears licenses and usage
+app.post('/vibey-admin-8f3k2j/reset', async (req, res) => {
+  const fs = require('fs').promises;
+  const path = require('path');
+  try {
+    await fs.writeFile(path.join(__dirname, 'licenses.json'), JSON.stringify({ licenses: [] }, null, 2));
+    await fs.writeFile(path.join(__dirname, 'usage.json'), JSON.stringify({}, null, 2));
+    res.json({ success: true, message: 'All licenses and usage data cleared' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Admin: list all licenses (secret URL)
 app.get('/vibey-admin-8f3k2j/all', async (req, res) => {
   const fs = require('fs').promises;
