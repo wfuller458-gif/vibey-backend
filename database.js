@@ -42,7 +42,7 @@ async function createLicense(email, plan, stripeCustomerId, stripeSubscriptionId
   const license = {
     key: generateLicenseKey(),
     email,
-    plan, // 'monthly' or 'yearly'
+    plan, // 'lifetime'
     status: 'active',
     stripeCustomerId,
     stripeSubscriptionId,
