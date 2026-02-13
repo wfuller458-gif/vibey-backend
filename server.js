@@ -149,6 +149,21 @@ app.get('/license/:sessionId', async (req, res) => {
   }
 });
 
+// Admin: REVOKE a license
+app.post('/vibey-admin-8f3k2j/revoke-license/:key', async (req, res) => {
+  try {
+    const { key } = req.params;
+    const license = await getLicenseByKey(key);
+    if (!license) {
+      return res.status(404).json({ success: false, error: 'License not found' });
+    }
+    await updateLicense(key, { status: 'revoked' });
+    res.json({ success: true, message: `License ${key} revoked` });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Admin: DELETE a single user from usage tracking
 app.delete('/vibey-admin-8f3k2j/user/:deviceId', async (req, res) => {
   const fs = require('fs').promises;
@@ -316,7 +331,10 @@ app.get('/vibey-admin-8f3k2j/dashboard', async (req, res) => {
       '<td>' + timeAgo(u.lastSeen) + '</td>' +
       '<td>' + u.sessionCount + '</td>' +
       '<td>' + (u.appVersion || '-') + '</td>' +
-      '<td><button onclick="deleteUser(\'' + u.deviceId + '\')" style="background:#ef4444;color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px">Delete</button></td>' +
+      '<td style="display:flex;gap:4px">' +
+        (u.licenseKey ? '<button onclick="revokeLicense(\'' + u.licenseKey + '\')" style="background:#f59e0b;color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px">Revoke</button>' : '') +
+        '<button onclick="deleteUser(\'' + u.deviceId + '\')" style="background:#ef4444;color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px">Delete</button>' +
+      '</td>' +
       '</tr>';
   }).join('');
 
@@ -364,6 +382,35 @@ app.get('/vibey-admin-8f3k2j/dashboard', async (req, res) => {
 '      <div class="stat-label">Converted</div>' +
 '    </div>' +
 '  </div>' +
+'  <h2>Licenses (' + licenses.length + ')</h2>' +
+'  <table>' +
+'    <thead>' +
+'      <tr>' +
+'        <th>License Key</th>' +
+'        <th>Email</th>' +
+'        <th>Plan</th>' +
+'        <th>Status</th>' +
+'        <th>Created</th>' +
+'        <th>Actions</th>' +
+'      </tr>' +
+'    </thead>' +
+'    <tbody>' +
+  (licenses.length > 0
+    ? licenses.map(l => {
+        const statusColor = l.status === 'active' ? '#22c55e' : l.status === 'revoked' ? '#ef4444' : '#f59e0b';
+        return '<tr id="license-' + l.key + '">' +
+          '<td><code style="font-size:10px">' + l.key + '</code></td>' +
+          '<td>' + (l.email || '-') + '</td>' +
+          '<td>' + (l.plan || '-') + '</td>' +
+          '<td>' + badge(l.status, statusColor) + '</td>' +
+          '<td>' + (l.createdAt ? new Date(l.createdAt).toLocaleDateString() : '-') + '</td>' +
+          '<td>' + (l.status === 'active' ? '<button onclick="revokeLicense(\'' + l.key + '\')" style="background:#f59e0b;color:white;border:none;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px">Revoke</button>' : badge(l.status, statusColor)) + '</td>' +
+          '</tr>';
+      }).join('')
+    : '<tr><td colspan="6" style="text-align:center;color:#64748b">No licenses yet</td></tr>'
+  ) +
+'    </tbody>' +
+'  </table>' +
 '  <h2>All Users</h2>' +
 '  <table>' +
 '    <thead>' +
@@ -386,6 +433,12 @@ app.get('/vibey-admin-8f3k2j/dashboard', async (req, res) => {
 '      const res = await fetch("/vibey-admin-8f3k2j/user/" + encodeURIComponent(deviceId), { method: "DELETE" });' +
 '      if (res.ok) { document.getElementById("row-" + deviceId).remove(); }' +
 '      else { alert("Failed to delete user"); }' +
+'    }' +
+'    async function revokeLicense(key) {' +
+'      if (!confirm("Revoke license " + key + "? The user will lose access.")) return;' +
+'      const res = await fetch("/vibey-admin-8f3k2j/revoke-license/" + encodeURIComponent(key), { method: "POST" });' +
+'      if (res.ok) { location.reload(); }' +
+'      else { alert("Failed to revoke license"); }' +
 '    }' +
 '  </script>' +
 '</body>' +
