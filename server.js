@@ -48,22 +48,35 @@ app.post('/webhook', express.raw({ type: '*/*' }), async (req, res) => {
       case 'checkout.session.completed': {
         const session = event.data.object;
 
-        // Get customer details
-        const customer = await stripe.customers.retrieve(session.customer);
+        // Get customer email - try customer object first, fall back to session details
+        let email, customerId;
+        if (session.customer) {
+          const customer = await stripe.customers.retrieve(session.customer);
+          email = customer.email;
+          customerId = customer.id;
+        } else {
+          email = session.customer_details?.email;
+          customerId = null;
+        }
+
+        if (!email) {
+          console.error('No email found for checkout session:', session.id);
+          break;
+        }
 
         // Lifetime one-time purchase
         const plan = 'lifetime';
-        console.log('Checkout completed - lifetime purchase');
+        console.log('Checkout completed - lifetime purchase for:', email);
 
-        // Create license (no subscription ID for one-time payments)
+        // Create license
         const license = await createLicense(
-          customer.email,
+          email,
           plan,
-          customer.id,
+          customerId,
           null
         );
 
-        console.log(`License created for ${customer.email}: ${license.key}`);
+        console.log(`License created for ${email}: ${license.key}`);
         break;
       }
 
@@ -96,14 +109,19 @@ app.get('/license/:sessionId', async (req, res) => {
     const session = await stripe.checkout.sessions.retrieve(sessionId);
     console.log('Stripe session found, customer:', session.customer);
 
-    if (!session || !session.customer) {
-      console.log('No session or no customer');
+    if (!session) {
+      console.log('No session found');
       return res.status(404).json({ error: 'Session not found' });
     }
 
-    // Get customer email (same way webhook does it)
-    const customer = await stripe.customers.retrieve(session.customer);
-    const email = customer.email;
+    // Get email - try customer object first, fall back to session details
+    let email;
+    if (session.customer) {
+      const customer = await stripe.customers.retrieve(session.customer);
+      email = customer.email;
+    } else {
+      email = session.customer_details?.email;
+    }
     console.log('Customer email:', email);
 
     if (!email) {
