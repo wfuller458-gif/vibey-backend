@@ -2,8 +2,11 @@ const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
 
-const DB_FILE = path.join(__dirname, 'licenses.json');
-const USAGE_FILE = path.join(__dirname, 'usage.json');
+// Use DATA_DIR env var for persistent storage (e.g. Railway volume mount)
+// Falls back to __dirname for local development
+const DATA_DIR = process.env.DATA_DIR || __dirname;
+const DB_FILE = path.join(DATA_DIR, 'licenses.json');
+const USAGE_FILE = path.join(DATA_DIR, 'usage.json');
 
 // Initialize database file if it doesn't exist
 async function initDB() {
